@@ -1,0 +1,15 @@
+# Python / FastAPI
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.env
+
+# Node / Next.js
+nextjs/node_modules/
+nextjs/.next/
+nextjs/.vercel/
+nextjs/.env*
