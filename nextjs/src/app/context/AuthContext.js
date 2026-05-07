@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }) => {
            router.push('/');
         } catch(error){
             console.log('Login Failed:', error);
+            throw error;
         }
     };
 

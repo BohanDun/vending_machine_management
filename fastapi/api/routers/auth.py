@@ -30,9 +30,15 @@ class Token(BaseModel):
 def authenticate_user(username: str, password: str, db):
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        return False
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sorry, username not registered",
+        )
     if not bcrypt_context.verify(password, user.hashed_password):
-        return False
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect Password",
+        )
     return user
 
 def create_access_token(username: str, user_id: int, expires_delta: timedelta):
@@ -67,8 +73,6 @@ async def create_user(db:db_dependency, create_user_request: UserCreateRequest):
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
                                  db: db_dependency):
     user = authenticate_user(form_data.username, form_data.password, db)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail = "Could not validate user")
     token = create_access_token(user.username, user.id, timedelta(minutes=20))
 
     return {'access_token': token, 'token_type': 'bearer'}

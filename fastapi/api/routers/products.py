@@ -20,6 +20,9 @@ class ProductCreate(ProductBase):
 class ProductPriceUpdate(BaseModel):
     price: condecimal(max_digits=10, decimal_places=2, ge=Decimal("0.00"))
 
+class ProductQuantityChange(BaseModel):
+    quantity: int = Field(gt=0)
+
 @router.get("/{product_id}")
 def get_product(db: db_dependency, user: user_dependency, product_id: int):
     return (
@@ -100,6 +103,27 @@ def update_product_price(
         raise HTTPException(status_code=404, detail="Not found")
 
     db_product.price = payload.price
+    db.commit()
+    db.refresh(db_product)
+    return db_product
+
+@router.post("/{product_id}/restock")
+def restock_product(
+    db: db_dependency,
+    user: user_dependency,
+    product_id: int,
+    payload: ProductQuantityChange,
+):
+    db_product = (
+        db.query(Product)
+        .filter(Product.id == product_id, Product.user_id == user.get("id"))
+        .first()
+    )
+
+    if db_product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    db_product.quantity += payload.quantity
     db.commit()
     db.refresh(db_product)
     return db_product

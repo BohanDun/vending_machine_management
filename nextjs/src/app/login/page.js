@@ -9,13 +9,25 @@ const Login = () => {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginMessage, setLoginMessage] = useState("");
 
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    login(username, password);
+    setLoginMessage("");
+    try {
+      await login(username, password);
+    } catch (err) {
+      const msg =
+        (err &&
+          err.response &&
+          (err.response.data?.detail || err.response.data)) ||
+        err.message ||
+        "Login failed";
+      setLoginMessage(msg);
+    }
   };
 
   const handleRegister = (e) => {
@@ -47,6 +59,11 @@ const Login = () => {
   return (
     <div className="container">
       <h2>Login</h2>
+      {loginMessage && (
+        <div className="alert alert-danger" role="alert">
+          {loginMessage}
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
           <label htmlFor="username" className="form-label">Username</label>

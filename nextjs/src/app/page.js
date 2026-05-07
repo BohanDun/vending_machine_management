@@ -20,6 +20,10 @@ const Home = () => {
   const [selectedProductQuantityByMachine, setSelectedProductQuantityByMachine] = useState({});
   const [deleteQuantityByMachineProduct, setDeleteQuantityByMachineProduct] = useState({});
   const [addQuantityByMachineProduct, setAddQuantityByMachineProduct] = useState({});
+  const [putBackQuantityByMachineProduct, setPutBackQuantityByMachineProduct] = useState({});
+  const [restockQuantityByProduct, setRestockQuantityByProduct] = useState({});
+
+  const getErrorMessage = (error, fallback) => error?.response?.data?.detail || fallback;
 
   const getAuth = () => {
     const raw = sessionStorage.getItem('token');
@@ -157,6 +161,7 @@ const Home = () => {
       }));
     } catch (error) {
       console.error('Failed to add product to machine:', error);
+      alert(getErrorMessage(error, 'Failed to add product to machine'));
     }
   };
 
@@ -170,6 +175,7 @@ const Home = () => {
       await refreshProductsAndMachines();
     } catch (error) {
       console.error('Failed to remove product from machine:', error);
+      alert(getErrorMessage(error, 'Failed to remove product from machine'));
     }
   };
 
@@ -192,6 +198,7 @@ const Home = () => {
       }));
     } catch (error) {
       console.error('Failed to delete machine product quantity:', error);
+      alert(getErrorMessage(error, 'Failed to sell product quantity'));
     }
   };
 
@@ -214,19 +221,30 @@ const Home = () => {
       }));
     } catch (error) {
       console.error('Failed to add machine product quantity:', error);
+      alert(getErrorMessage(error, 'Failed to add machine product quantity'));
     }
   };
 
-  const updateMachineProductQuantity = async (machineId, productId, quantity) => {
+  const putBackMachineProductQuantity = async (machineId, productId) => {
+    const key = `${machineId}-${productId}`;
+    const quantity = Number(putBackQuantityByMachineProduct[key] || 0);
+
+    if (quantity <= 0) return;
+
     try {
-      await axios.put(
-        `http://localhost:8000/machines/${machineId}/products/${productId}/quantity`,
-        { quantity: Number(quantity) },
+      await axios.post(
+        `http://localhost:8000/machines/${machineId}/products/${productId}/put-back`,
+        { quantity },
         getAuth()
       );
       await refreshProductsAndMachines();
+      setPutBackQuantityByMachineProduct((prev) => ({
+        ...prev,
+        [key]: '',
+      }));
     } catch (error) {
-      console.error('Failed to update machine product quantity:', error);
+      console.error('Failed to put machine product quantity back:', error);
+      alert(getErrorMessage(error, 'Failed to put product back in warehouse'));
     }
   };
 
@@ -240,6 +258,28 @@ const Home = () => {
       await refreshProductsAndMachines();
     } catch (error) {
       console.error('Failed to update product price:', error);
+    }
+  };
+
+  const restockProduct = async (productId) => {
+    const quantity = Number(restockQuantityByProduct[productId] || 0);
+
+    if (quantity <= 0) return;
+
+    try {
+      await axios.post(
+        `http://localhost:8000/products/${productId}/restock`,
+        { quantity },
+        getAuth()
+      );
+      await refreshProductsAndMachines();
+      setRestockQuantityByProduct((prev) => ({
+        ...prev,
+        [productId]: '',
+      }));
+    } catch (error) {
+      console.error('Failed to restock product:', error);
+      alert(getErrorMessage(error, 'Failed to restock product'));
     }
   };
 
@@ -384,16 +424,12 @@ const Home = () => {
                   key={product.id}
                 >
                   <div>
-                    <h5 className="mb-1">{product.name}</h5>
-                    <p className="mb-1 text-body-secondary">
-                      {product.description || 'No description'}
-                    </p>
-                    <div className="d-flex flex-wrap gap-3 mb-1">
-                      <small className="text-body-secondary">
-                        Total quantity: {Number(product.quantity || 0) + Number(product.machine_quantity_total || 0)}
-                      </small>
+                    <h5 className="mb-3">
+                      {product.description ? `${product.name}: ${product.description}` : product.name}
+                    </h5>
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
                       <label className="d-flex align-items-center gap-2 text-body-secondary">
-                        <small>Price:</small>
+                        <span>Price:</span>
                         <input
                           type="number"
                           className="form-control form-control-sm"
@@ -404,6 +440,39 @@ const Home = () => {
                           onBlur={(e) => updateProductPrice(product.id, e.target.value)}
                         />
                       </label>
+                    </div>
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <span className="text-body-secondary me-2">
+                        Total quantity: {Number(product.quantity || 0) + Number(product.machine_quantity_total || 0)}
+                      </span>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        style={{ maxWidth: '120px' }}
+                        min="1"
+                        step="1"
+                        placeholder="Restock qty"
+                        value={restockQuantityByProduct[product.id] || ''}
+                        onChange={(e) =>
+                          setRestockQuantityByProduct((prev) => ({
+                            ...prev,
+                            [product.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-success"
+                        onClick={() => restockProduct(product.id)}
+                        disabled={!restockQuantityByProduct[product.id]}
+                      >
+                        Restock
+                      </button>
+                    </div>
+                    <div className="d-flex flex-wrap gap-3 mb-1">
+                      <small className="text-body-secondary">
+                        Warehouse: {product.quantity || 0}
+                      </small>
                       <small className="text-body-secondary">
                         In machines: {product.machine_quantity_total || 0}
                       </small>
@@ -436,9 +505,18 @@ const Home = () => {
         </div>
 
         <div>
-          <h3>Your machines:</h3>
-          <div className="d-flex flex-column gap-3">
-            {machines.map(machine => (
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <h3 className="mb-0">Your machines:</h3>
+            <span className="badge text-bg-secondary">{machines.length} registered</span>
+          </div>
+
+          {machines.length === 0 ? (
+            <div className="alert alert-secondary mb-0" role="status">
+              No machines registered for this account yet.
+            </div>
+          ) : (
+            <div className="d-flex flex-column gap-3">
+              {machines.map(machine => (
               <div className="card" key={machine.id}>
                 <div className="card-body">
                   <button type="button" className="btn btn-sm btn-outline-danger float-end" onClick={() => deleteMachine(machine.id)}>Delete</button>
@@ -449,74 +527,100 @@ const Home = () => {
                       <li key={product.id}>
                         <div className="d-flex flex-wrap align-items-center gap-2">
                           <span>
-                            {product.name}: {product.description} - Total: {product.quantity}, In this machine: {product.machine_quantity || 0}, Price: ${Number(product.price).toFixed(2)}
+                            Price: ${Number(product.price).toFixed(2)}, {product.name}: {product.description} - Warehouse: {product.quantity || 0}, In this machine: {product.machine_quantity || 0}
                           </span>
-                          <input
-                            type="number"
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: '110px' }}
-                            min="0"
-                            step="1"
-                            defaultValue={product.machine_quantity || 0}
-                            onBlur={(e) =>
-                              updateMachineProductQuantity(machine.id, product.id, e.target.value)
-                            }
-                          />
                         </div>
-                        <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-                          <input
-                            type="number"
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: '120px' }}
-                            min="1"
-                            step="1"
-                            placeholder="Add qty"
-                            value={addQuantityByMachineProduct[`${machine.id}-${product.id}`] || ''}
-                            onChange={(e) =>
-                              setAddQuantityByMachineProduct((prev) => ({
-                                ...prev,
-                                [`${machine.id}-${product.id}`]: e.target.value,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-success"
-                            onClick={() => addMachineProductQuantity(machine.id, product)}
-                            disabled={!addQuantityByMachineProduct[`${machine.id}-${product.id}`]}
-                          >
-                            Add Quantity
-                          </button>
-                          <input
-                            type="number"
-                            className="form-control form-control-sm"
-                            style={{ maxWidth: '120px' }}
-                            min="1"
-                            step="1"
-                            placeholder="Delete qty"
-                            value={deleteQuantityByMachineProduct[`${machine.id}-${product.id}`] || ''}
-                            onChange={(e) =>
-                              setDeleteQuantityByMachineProduct((prev) => ({
-                                ...prev,
-                                [`${machine.id}-${product.id}`]: e.target.value,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => deleteMachineProductQuantity(machine.id, product.id)}
-                            disabled={!deleteQuantityByMachineProduct[`${machine.id}-${product.id}`]}
-                          >
-                            Delete Quantity
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={() => removeProductFromMachine(machine.id, product.id)}
-                          >
-                            Remove All
-                          </button>
+                        <div className="d-flex flex-column gap-2 mt-2 mb-3">
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: '120px' }}
+                              min="1"
+                              max={product.quantity || 0}
+                              step="1"
+                              placeholder="Add qty"
+                              value={addQuantityByMachineProduct[`${machine.id}-${product.id}`] || ''}
+                              onChange={(e) =>
+                                setAddQuantityByMachineProduct((prev) => ({
+                                  ...prev,
+                                  [`${machine.id}-${product.id}`]: e.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => addMachineProductQuantity(machine.id, product)}
+                              disabled={
+                                !addQuantityByMachineProduct[`${machine.id}-${product.id}`] ||
+                                Number(addQuantityByMachineProduct[`${machine.id}-${product.id}`]) > Number(product.quantity || 0)
+                              }
+                            >
+                              Add Quantity
+                            </button>
+                          </div>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: '120px' }}
+                              min="1"
+                              max={product.machine_quantity || 0}
+                              step="1"
+                              placeholder="Sell qty"
+                              value={deleteQuantityByMachineProduct[`${machine.id}-${product.id}`] || ''}
+                              onChange={(e) =>
+                                setDeleteQuantityByMachineProduct((prev) => ({
+                                  ...prev,
+                                  [`${machine.id}-${product.id}`]: e.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => deleteMachineProductQuantity(machine.id, product.id)}
+                              disabled={!deleteQuantityByMachineProduct[`${machine.id}-${product.id}`]}
+                            >
+                              Sell
+                            </button>
+                          </div>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: '120px' }}
+                              min="1"
+                              max={product.machine_quantity || 0}
+                              step="1"
+                              placeholder="Put back qty"
+                              value={putBackQuantityByMachineProduct[`${machine.id}-${product.id}`] || ''}
+                              onChange={(e) =>
+                                setPutBackQuantityByMachineProduct((prev) => ({
+                                  ...prev,
+                                  [`${machine.id}-${product.id}`]: e.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => putBackMachineProductQuantity(machine.id, product.id)}
+                              disabled={!putBackQuantityByMachineProduct[`${machine.id}-${product.id}`]}
+                            >
+                              Put Back
+                            </button>
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => removeProductFromMachine(machine.id, product.id)}
+                            >
+                              Put Back All
+                            </button>
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -552,7 +656,12 @@ const Home = () => {
                       type="number"
                       className="form-control"
                       style={{ maxWidth: '140px' }}
-                      min="0"
+                      min="1"
+                      max={
+                        products.find(
+                          (product) => String(product.id) === String(selectedProductByMachine[machine.id])
+                        )?.quantity || 0
+                      }
                       step="1"
                       placeholder="Quantity"
                       value={selectedProductQuantityByMachine[machine.id] || ''}
@@ -568,15 +677,25 @@ const Home = () => {
                       type="button"
                       className="btn btn-outline-primary"
                       onClick={() => addProductToMachine(machine.id)}
-                      disabled={!selectedProductByMachine[machine.id]}
+                      disabled={
+                        !selectedProductByMachine[machine.id] ||
+                        Number(selectedProductQuantityByMachine[machine.id] || 0) <= 0 ||
+                        Number(selectedProductQuantityByMachine[machine.id] || 0) >
+                          Number(
+                            products.find(
+                              (product) => String(product.id) === String(selectedProductByMachine[machine.id])
+                            )?.quantity || 0
+                          )
+                      }
                     >
                       Add
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </ProtectedRoute>
