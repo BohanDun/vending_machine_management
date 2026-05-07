@@ -32,8 +32,6 @@ const Login = () => {
 
   const handleRegister = (e) => {
     e.preventDefault();
-    // 如果你的后端路由是 /auth/register，把下面这行改成：
-    // axios.post("http://localhost:8000/auth/register", {...})
     axios
       .post("http://localhost:8000/auth/", {
         username: registerUsername,
@@ -42,7 +40,8 @@ const Login = () => {
       .then(() => {
         setRegisterUsername("");
         setRegisterPassword("");
-        alert("注册成功");
+        setLoginMessage("");
+        alert("Account created successfully");
       })
       .catch((err) => {
         const msg =
